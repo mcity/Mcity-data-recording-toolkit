@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Republishes rate-limited camera frames for Lucid cameras. Use in conjunction with "camera-drivers.sh"
+# Republishes rate-limited camera frames for Lucid cameras. Use in conjunction with "lucid-drivers-*.sh"
 
 rate_hz=30
 
