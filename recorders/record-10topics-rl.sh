@@ -10,8 +10,8 @@ fi
 output_filename="$1"
 
 # Path to the base directory where the data will be saved
-base_dir="/media/mcity/SENSOR_DATA_B/april22"
-#base_dir="/home/mcity/mcity-engineering/vince/data-capture/"
+#base_dir="/media/mcity/SENSOR_DATA_B/april22"
+base_dir="/home/mcity/mcity-engineering/vince/data-capture/july-28-2025"
 
 # Run the ros2 bag record command with the provided output filename
 ros2 bag record -s mcap \

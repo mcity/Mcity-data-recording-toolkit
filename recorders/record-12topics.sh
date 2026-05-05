@@ -9,9 +9,16 @@ fi
 # Set the output filename based on the argument
 output_filename="$1"
 
-# Path to the base directory where the data will be saved
-base_dir="/media/mcity/SENSOR_DATA_B/april22"
-#base_dir="/home/mcity/mcity-engineering/vince/data-capture/"
+# Path to the base directory where the data will be saved, depending on which drive you will be saving to
+# EXTERNAL DRIVE
+#base_dir="/media/mcity/SENSOR_DATA_B/feb27-2026-calibration"
+
+# MAIN DRIVE
+base_dir="/home/mcity/mcity-engineering/vince/data-capture/may5-2026"
+
+# USB DRIVE
+#base_dir="/media/mcity/SANDISK/mache-data-capture/feb26-2026"
+
 
 # Run the ros2 bag record command with the provided output filename
 ros2 bag record -s mcap \
@@ -25,10 +32,9 @@ ros2 bag record -s mcap \
   /rslidar_front_points \
   /rslidar_left_points \
   /rslidar_right_points \
+  /tf \
   /oxts/imu \
   /oxts/fix \
-  /tf \
   -o "$base_dir/$output_filename" \
-  --max-cache-size 49140000000
-
+  --max-cache-size 55000000000
 
