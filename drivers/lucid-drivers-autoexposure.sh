@@ -18,15 +18,16 @@ sleep 3
 # Camera 2
 serial="224002282"
 gnome-terminal --tab --title=cam2 -- bash -c "ros2 run arena_camera_node start --ros-args -p pixelformat:=$pixelformat -p gamma:=$gamma -p target_brightness:=$target_brightness -p serial:=$serial -p topic:=/arenacam2/images -p camera_name:=arenacam2; /bin/bash"
-sleep 3000
+sleep 3
 
 # Camera 3
 serial="223100016"
 gnome-terminal --tab --title=cam3 -- bash -c "ros2 run arena_camera_node start --ros-args -p pixelformat:=$pixelformat -p gamma:=$gamma -p target_brightness:=$target_brightness -p serial:=$serial -p topic:=/arenacam3/images -p camera_name:=arenacam3; /bin/bash"
-#sleep 3
+sleep 3
 
 # Camera 4
-serial="224800722"
+#serial="224800722"
+serial="244600105"
 gnome-terminal --tab --title=cam4 -- bash -c "ros2 run arena_camera_node start --ros-args -p pixelformat:=$pixelformat -p gamma:=$gamma -p target_brightness:=$target_brightness -p serial:=$serial -p topic:=/arenacam4/images -p camera_name:=arenacam4; /bin/bash"
 sleep 3
 

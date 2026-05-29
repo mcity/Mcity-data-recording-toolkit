@@ -22,15 +22,7 @@ base_dir="/media/mcity/SENSOR_DATA_B/may8-2026-nurec"
 
 # Run the ros2 bag record command with the provided output filename
 ros2 bag record -s mcap \
-  /arenacam1/images \
-  /arenacam2/images \
-  /arenacam3/images \
   /arenacam4/images \
-  /arenacam5/images \
-  /arenacam6/images \
-  /rslidar_back_points \
-  /rslidar_front_points \
-  /rslidar_left_points \
   /rslidar_right_points \
   /tf \
   /oxts/imu \
