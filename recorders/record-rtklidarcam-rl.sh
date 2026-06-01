@@ -10,19 +10,27 @@ fi
 output_filename="$1"
 
 # Path to the base directory where the data will be saved, depending on which drive you will be saving to
-# EXTERNAL"
-base_dir="/media/mcity/SENSOR_DATA_B/may8-2026-nurec"
+# SENSOR DRIVE
+base_dir="/media/mcity/SENSOR_DATA_B/may8-2026"
 
-# MAIN DRIVE
+# MAIN OS DRIVE
 #base_dir="/home/mcity/mcity-engineering/xujie/data-capture/may8-2026"
 
-# USB DRIVE
+# EXTERNAL USB DRIVE
 #base_dir="/media/mcity/SANDISK/mache-data-capture/feb26-2026"
 
 
 # Run the ros2 bag record command with the provided output filename
 ros2 bag record -s mcap \
-  /arenacam4/images \
+  /cam1_rl/images \
+  /cam2_rl/images \
+  /cam3_rl/images \
+  /cam4_rl/images \
+  /cam5_rl/images \
+  /cam6_rl/images \
+  /rslidar_back_points \
+  /rslidar_front_points \
+  /rslidar_left_points \
   /rslidar_right_points \
   /tf \
   /oxts/imu \
