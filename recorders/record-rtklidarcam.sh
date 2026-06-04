@@ -11,7 +11,8 @@ output_filename="$1"
 
 # Path to the base directory where the data will be saved, depending on which drive you will be saving to
 # SENSOR DRIVE
-base_dir="/media/mcity/SENSOR_DATA_B/may8-2026"
+#base_dir="/media/mcity/SENSOR_DATA_B/june4-2026"
+base_dir="/media/mcity/New Volume/june4-2026"
 
 # MAIN OS DRIVE
 #base_dir="/home/mcity/mcity-engineering/xujie/data-capture/may8-2026"
@@ -28,13 +29,18 @@ ros2 bag record -s mcap \
   /arenacam4/images \
   /arenacam5/images \
   /arenacam6/images \
-  /rslidar_back_points \
-  /rslidar_front_points \
-  /rslidar_left_points \
-  /rslidar_right_points \
+  /ins/imu \
+  /ins/nav_sat_fix \
+  /rslidar_points \
   /tf \
-  /oxts/imu \
-  /oxts/fix \
+  /tf_static \
   -o "$base_dir/$output_filename" \
   --max-cache-size 55000000000
+
+  #/oxts/imu \
+  #/oxts/fix \
+  #/rslidar_back_points \
+  #/rslidar_front_points \
+  #/rslidar_left_points \
+  #/rslidar_right_points \
 
