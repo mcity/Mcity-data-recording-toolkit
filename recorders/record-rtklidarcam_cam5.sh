@@ -12,7 +12,7 @@ output_filename="$1"
 # Path to the base directory where the data will be saved, depending on which drive you will be saving to
 # SENSOR DRIVE
 #base_dir="/media/mcity/SENSOR_DATA_B/june4-2026"
-base_dir="/media/mcity/New Volume/june16-2026"
+base_dir="/media/mcity/New Volume/june12-2026"
 
 # MAIN OS DRIVE
 #base_dir="/home/mcity/mcity-engineering/xujie/data-capture/may8-2026"
@@ -23,15 +23,9 @@ base_dir="/media/mcity/New Volume/june16-2026"
 
 # Run the ros2 bag record command with the provided output filename, and a 55 GB cache
 ros2 bag record -s mcap \
-  /arenacam1/images \
-  /arenacam2/images \
-  /arenacam3/images \
-  /arenacam4/images \
   /arenacam5/images \
-  /arenacam6/images \
   /ins/imu \
   /ins/nav_sat_fix \
-  /rslidar_points \
   /tf \
   /tf_static \
   -o "$base_dir/$output_filename" \
