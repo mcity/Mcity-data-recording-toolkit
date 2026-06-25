@@ -24,9 +24,13 @@ There is also an optional, additional rate-limiter driver which re-publishes the
 - Fire one synchronized shot: `./trigger-all.sh`
 - Continuous: `./trigger-all-rate.sh 5` (≈5 Hz shell loop), or set `action_trigger_rate` in the launcher for a hardware-precise rate.
 
-Camera topics are unchanged (`/arenacamN/images`), so the existing recorders work as-is. Timestamps are **RTK GPS time** (not UTC/Unix) — apply the GPS↔UTC offset downstream. Full details and the on-vehicle verification checklist: `arena_camera_node/SYNC_TRIGGERING.md`.
+Camera topics are unchanged (`/arenacamN/images`), so the existing recorders work as-is. Timestamps are **RTK GPS time** (not UTC/Unix) — apply the GPS↔UTC offset downstream.
 
 This **supersedes** `lucid-drivers-autoexposure-trigger-mode.sh`: with the updated driver, `trigger_mode=true` performs action-command sync (not software trigger), so that older script would configure the cameras but never fire.
+
+**Detailed write-ups (root cause → fix → why it works):**
+- `SYNC_RECORDING.md` (this repo) — the recording/transport/operational side: QoS, transmission staggering, memory sizing, gotchas, verification.
+- `arena_camera_node/SYNC_TRIGGERING.md` (driver repo) — the camera/capture side: how PTP + scheduled action commands produce synchronized exposure.
 
 # Recorders
 Main one is `record-rtklidarcam.sh`. If you are using the rate-limiter and only want to record the rate-limited topics, you can use `record-rtklidarcam-rl.sh`
