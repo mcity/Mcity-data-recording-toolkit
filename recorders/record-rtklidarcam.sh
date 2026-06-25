@@ -12,7 +12,7 @@ output_filename="$1"
 # Path to the base directory where the data will be saved, depending on which drive you will be saving to
 # SENSOR DRIVE
 #base_dir="/media/mcity/SENSOR_DATA_B/june4-2026"
-base_dir="/media/mcity/New Volume/june16-2026"
+base_dir="/media/mcity/New Volume/june25-2026"
 
 # MAIN OS DRIVE
 #base_dir="/home/mcity/mcity-engineering/xujie/data-capture/may8-2026"

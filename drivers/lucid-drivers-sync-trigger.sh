@@ -45,7 +45,7 @@ ptp_domain=0
 # In-driver continuous rate (Hz) on the master. Defaults to 10 Hz so a fresh
 # launch self-fires (needed for continuous recording). Set to 0.0 for one-shot
 # only, then fire manually with ./trigger-all.sh.
-action_trigger_rate=10.0
+action_trigger_rate=30.0
 
 # Publisher QoS. For RECORDING, reliable avoids silently dropping frames when
 # the six synchronized images burst into the recorder at once (best_effort
