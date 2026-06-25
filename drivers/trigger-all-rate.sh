@@ -8,9 +8,9 @@
 # shell timing). Each individual shot is still fully PTP-synchronized ACROSS the
 # six cameras. For a hardware-precise, evenly spaced rate, prefer the in-driver
 # timer instead: launch the master with action_trigger_rate:=<hz> (see
-# lucid-drivers-action-trigger-mode.sh) and do NOT run this script.
+# lucid-drivers-sync-trigger.sh) and do NOT run this script.
 #
-# Prereq: launch with ./lucid-drivers-action-trigger-mode.sh and wait for PTP lock.
+# Prereq: launch with ./lucid-drivers-sync-trigger.sh and wait for PTP lock.
 
 rate_hz="${1:-5}"
 period=$(awk "BEGIN { print 1.0 / $rate_hz }")

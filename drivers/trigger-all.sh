@@ -7,7 +7,7 @@
 # command that every camera receives -> one simultaneous frame per camera on
 # each /arenacamN/images topic.
 #
-# Prereq: launch with ./lucid-drivers-action-trigger-mode.sh first, and wait for
-# PTP to lock (the master refuses to fire until its PtpStatus == Slave).
+# Prereq: launch with ./lucid-drivers-sync-trigger.sh first, and wait for PTP to
+# lock (the master refuses to fire until its PtpStatus == Slave).
 
 ros2 service call /trigger_all std_srvs/srv/Trigger
