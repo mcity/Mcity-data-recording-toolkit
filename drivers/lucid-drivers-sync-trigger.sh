@@ -25,7 +25,9 @@ gamma=0.5
 
 # Fixed exposure (microseconds) is recommended for deterministic synchronized
 # capture under triggering. [verify] tune this for the rig/scene on the vehicle.
-exposure_time=4000
+# NOTE: must be a FLOAT (e.g. 4000.0). The driver declares exposure_time as a
+# double, so rclcpp rejects an integer override like 4000.
+exposure_time=4000.0
 
 # Shared action keys/mask -- MUST be identical on all six cameras and on the
 # fire command. Defaults match the driver defaults.
@@ -44,6 +46,16 @@ ptp_domain=0
 # (fire via ./trigger-all.sh). For a hardware-precise steady rate set e.g. 5.0.
 action_trigger_rate=0.0
 
+# Publisher QoS. For RECORDING, reliable avoids silently dropping frames when
+# the six synchronized images burst into the recorder at once (best_effort
+# discards on buffer overflow; reliable retransmits). keep_last + a few seconds
+# of depth absorbs transient stalls without unbounded memory growth. Set
+# qos_reliability=best_effort for low-latency live viewing if you are not
+# recording.
+qos_reliability=reliable
+qos_history=keep_last
+qos_history_depth=30
+
 ##################
 
 # Common args for every camera (trigger_mode on -> synchronized action capture).
@@ -51,7 +63,8 @@ common_args="-p pixelformat:=$pixelformat -p gamma:=$gamma -p exposure_time:=$ex
 -p trigger_mode:=true \
 -p action_device_key:=$action_device_key -p action_group_key:=$action_group_key \
 -p action_group_mask:=$action_group_mask -p action_lead_time:=$action_lead_time \
--p ptp_domain:=$ptp_domain"
+-p ptp_domain:=$ptp_domain \
+-p qos_reliability:=$qos_reliability -p qos_history:=$qos_history -p qos_history_depth:=$qos_history_depth"
 
 # NOTE on node naming: the stock node name is hardcoded ("arena_camera_node"),
 # so all six would share the same /<node>/trigger_image service and collide.
