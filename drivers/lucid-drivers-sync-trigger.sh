@@ -42,9 +42,10 @@ action_lead_time=0.05
 # PTP domain. Cameras commonly assume 0; must match RTK grandmaster + switch.
 ptp_domain=0
 
-# Optional in-driver continuous rate (Hz) on the master. 0 = one-shot only
-# (fire via ./trigger-all.sh). For a hardware-precise steady rate set e.g. 5.0.
-action_trigger_rate=0.0
+# In-driver continuous rate (Hz) on the master. Defaults to 10 Hz so a fresh
+# launch self-fires (needed for continuous recording). Set to 0.0 for one-shot
+# only, then fire manually with ./trigger-all.sh.
+action_trigger_rate=10.0
 
 # Publisher QoS. For RECORDING, reliable avoids silently dropping frames when
 # the six synchronized images burst into the recorder at once (best_effort
