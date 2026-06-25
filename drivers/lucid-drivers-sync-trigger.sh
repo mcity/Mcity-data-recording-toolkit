@@ -57,6 +57,22 @@ qos_reliability=reliable
 qos_history=keep_last
 qos_history_depth=30
 
+# --- Transmission staggering (helps HIGH-RATE recording; does NOT affect sync) ---
+# Each camera delays transmitting its already-captured frame by
+# (camera_index-1) * scftd_step, so the six synchronized frames arrive at the
+# host spread out instead of all at once (which overflows DDS receive buffers at
+# 30 Hz). This shapes TRANSMISSION only -- the PTP capture timestamp
+# (header.stamp) and the ~us cross-camera sync are unchanged.
+#
+# Units are device ticks; [verify] on your SDK (LUCID Arena is typically
+# nanoseconds). Constraint: keep (5 * scftd_step) + one-frame transmission time
+# BELOW the trigger period (1/rate). At 30 Hz the period is ~33 ms; with ~6 ms
+# frames, ~4 ms steps put cam6 at 20 ms and finishing ~26 ms -- inside 33 ms.
+# Set scftd_step=0 to disable staggering. Tune down if you see frames dropped at
+# the cameras (buffer overrun) or up if the host still sees bursty arrival.
+scftd_step=4000000        # per-camera frame-transmission-delay step (ns); 0 = off
+gev_scpd=0                # inter-packet delay (ns); 0 = off. Raise to throttle each camera's burst.
+
 ##################
 
 # Common args for every camera (trigger_mode on -> synchronized action capture).
@@ -65,7 +81,8 @@ common_args="-p pixelformat:=$pixelformat -p gamma:=$gamma -p exposure_time:=$ex
 -p action_device_key:=$action_device_key -p action_group_key:=$action_group_key \
 -p action_group_mask:=$action_group_mask -p action_lead_time:=$action_lead_time \
 -p ptp_domain:=$ptp_domain \
--p qos_reliability:=$qos_reliability -p qos_history:=$qos_history -p qos_history_depth:=$qos_history_depth"
+-p qos_reliability:=$qos_reliability -p qos_history:=$qos_history -p qos_history_depth:=$qos_history_depth \
+-p gev_scpd:=$gev_scpd"
 
 # NOTE on node naming: the stock node name is hardcoded ("arena_camera_node"),
 # so all six would share the same /<node>/trigger_image service and collide.
@@ -74,29 +91,29 @@ common_args="-p pixelformat:=$pixelformat -p gamma:=$gamma -p exposure_time:=$ex
 
 # Camera 1  -- ACTION MASTER (fires /trigger_all; broadcasts the action command)
 serial="254300057"
-gnome-terminal --tab --title=cam1 -- bash -c "ros2 run arena_camera_node start --ros-args -r __node:=arenacam1 $common_args -p serial:=$serial -p topic:=/arenacam1/images -p camera_name:=arenacam1 -p action_master:=true -p action_trigger_rate:=$action_trigger_rate; /bin/bash"
+gnome-terminal --tab --title=cam1 -- bash -c "ros2 run arena_camera_node start --ros-args -r __node:=arenacam1 $common_args -p serial:=$serial -p topic:=/arenacam1/images -p camera_name:=arenacam1 -p action_master:=true -p action_trigger_rate:=$action_trigger_rate -p gev_scftd:=$((0 * scftd_step)); /bin/bash"
 sleep 1
 
 # Camera 2
 serial="254300058"
-gnome-terminal --tab --title=cam2 -- bash -c "ros2 run arena_camera_node start --ros-args -r __node:=arenacam2 $common_args -p serial:=$serial -p topic:=/arenacam2/images -p camera_name:=arenacam2; /bin/bash"
+gnome-terminal --tab --title=cam2 -- bash -c "ros2 run arena_camera_node start --ros-args -r __node:=arenacam2 $common_args -p serial:=$serial -p topic:=/arenacam2/images -p camera_name:=arenacam2 -p gev_scftd:=$((1 * scftd_step)); /bin/bash"
 sleep 1
 
 # Camera 3
 serial="254300053"
-gnome-terminal --tab --title=cam3 -- bash -c "ros2 run arena_camera_node start --ros-args -r __node:=arenacam3 $common_args -p serial:=$serial -p topic:=/arenacam3/images -p camera_name:=arenacam3; /bin/bash"
+gnome-terminal --tab --title=cam3 -- bash -c "ros2 run arena_camera_node start --ros-args -r __node:=arenacam3 $common_args -p serial:=$serial -p topic:=/arenacam3/images -p camera_name:=arenacam3 -p gev_scftd:=$((2 * scftd_step)); /bin/bash"
 sleep 1
 
 # Camera 4
 serial="254300056"
-gnome-terminal --tab --title=cam4 -- bash -c "ros2 run arena_camera_node start --ros-args -r __node:=arenacam4 $common_args -p serial:=$serial -p topic:=/arenacam4/images -p camera_name:=arenacam4; /bin/bash"
+gnome-terminal --tab --title=cam4 -- bash -c "ros2 run arena_camera_node start --ros-args -r __node:=arenacam4 $common_args -p serial:=$serial -p topic:=/arenacam4/images -p camera_name:=arenacam4 -p gev_scftd:=$((3 * scftd_step)); /bin/bash"
 sleep 1
 
 # Camera 5
 serial="254300055"
-gnome-terminal --tab --title=cam5 -- bash -c "ros2 run arena_camera_node start --ros-args -r __node:=arenacam5 $common_args -p serial:=$serial -p topic:=/arenacam5/images -p camera_name:=arenacam5; /bin/bash"
+gnome-terminal --tab --title=cam5 -- bash -c "ros2 run arena_camera_node start --ros-args -r __node:=arenacam5 $common_args -p serial:=$serial -p topic:=/arenacam5/images -p camera_name:=arenacam5 -p gev_scftd:=$((4 * scftd_step)); /bin/bash"
 sleep 1
 
 # Camera 6
 serial="254300054"
-gnome-terminal --tab --title=cam6 -- bash -c "ros2 run arena_camera_node start --ros-args -r __node:=arenacam6 $common_args -p serial:=$serial -p topic:=/arenacam6/images -p camera_name:=arenacam6; /bin/bash"
+gnome-terminal --tab --title=cam6 -- bash -c "ros2 run arena_camera_node start --ros-args -r __node:=arenacam6 $common_args -p serial:=$serial -p topic:=/arenacam6/images -p camera_name:=arenacam6 -p gev_scftd:=$((5 * scftd_step)); /bin/bash"
