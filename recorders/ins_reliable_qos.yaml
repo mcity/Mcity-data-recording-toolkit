@@ -1,0 +1,21 @@
+# rosbag2 QoS subscription overrides.
+#
+# The OXTS INS publishes /ins/imu and /ins/nav_sat_fix with RELIABLE QoS, but
+# rosbag2 defaults its subscription for these topics to best-effort, so under
+# recording load it silently drops INS messages (the rate decays over a long
+# record, e.g. 100 Hz -> ~80 Hz). The reliable camera topics are unaffected,
+# which is why only the INS suffers.
+#
+# Forcing the INS subscriptions to reliable makes rosbag2 hold/retransmit them
+# instead of dropping. The INS is tiny (~hundreds of bytes at 100 Hz), so the
+# reliable buffering cost is negligible. See SYNC_RECORDING.md.
+#
+# Pass to: ros2 bag record --qos-profile-overrides-path ins_reliable_qos.yaml
+/ins/imu:
+  reliability: reliable
+  history: keep_last
+  depth: 100
+/ins/nav_sat_fix:
+  reliability: reliable
+  history: keep_last
+  depth: 100

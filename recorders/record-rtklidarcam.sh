@@ -21,8 +21,13 @@ base_dir="/media/mcity/New Volume/june29-2026/track_recordings"
 #base_dir="/media/mcity/SANDISK/mache-data-capture/feb26-2026"
 
 
+# Record /ins/* reliably -- the OXTS publisher is reliable but rosbag2 otherwise
+# subscribes best-effort and drops INS messages under recording load.
+qos_overrides="$(dirname "$0")/ins_reliable_qos.yaml"
+
 # Run the ros2 bag record command with the provided output filename, and a 55 GB cache
 ros2 bag record -s mcap \
+  --qos-profile-overrides-path "$qos_overrides" \
   /arenacam1/images \
   /arenacam2/images \
   /arenacam3/images \
