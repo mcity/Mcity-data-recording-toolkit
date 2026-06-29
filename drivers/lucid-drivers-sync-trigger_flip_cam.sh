@@ -48,7 +48,7 @@ ptp_domain=0
 # In-driver continuous rate (Hz) on the master. Defaults to 10 Hz so a fresh
 # launch self-fires (needed for continuous recording). Set to 0.0 for one-shot
 # only, then fire manually with ./trigger-all.sh.
-action_trigger_rate=20.0
+action_trigger_rate=30.0
 
 # Publisher QoS. For RECORDING, reliable avoids silently dropping frames when
 # the six synchronized images burst into the recorder at once (best_effort
@@ -85,7 +85,9 @@ common_args="-p pixelformat:=$pixelformat -p gamma:=$gamma -p target_brightness:
 -p action_group_mask:=$action_group_mask -p action_lead_time:=$action_lead_time \
 -p ptp_domain:=$ptp_domain \
 -p qos_reliability:=$qos_reliability -p qos_history:=$qos_history -p qos_history_depth:=$qos_history_depth \
--p gev_scpd:=$gev_scpd"
+-p gev_scpd:=$gev_scpd \
+-p reverse_x:=true \
+-p reverse_y:=true"
 
 # NOTE on node naming: the stock node name is hardcoded ("arena_camera_node"),
 # so all six would share the same /<node>/trigger_image service and collide.
