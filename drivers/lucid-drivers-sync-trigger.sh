@@ -17,7 +17,10 @@
 # Documentation: arena_camera_node/SYNC_TRIGGERING.md
 
 ##### CONFIG #####
-pixelformat="bayer_rggb8" # Default, faster
+# bayer_bggr8 matches a 180-deg flip (reverse_x + reverse_y) of the RGGB sensor.
+# With NO flip, use bayer_rggb8. See SYNC_TRIGGERING.md (Bayer caveat).
+pixelformat="bayer_bggr8"
+#pixelformat="bayer_rggb8" # no-flip default, faster
 #pixelformat="rgb8"
 #pixelformat="bayer_rggb16"
 
