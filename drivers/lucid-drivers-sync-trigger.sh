@@ -31,6 +31,12 @@ gamma=0.5
 #gamma=0.5
 target_brightness=70
 
+# Image flip in the camera (same as the ReverseX/ReverseY toggles in ArenaView).
+# Set true to mirror. NOTE: flipping a Bayer image changes the effective Bayer
+# pattern -- if colors look wrong after flipping, see SYNC_TRIGGERING.md.
+reverse_x=false
+reverse_y=false
+
 
 # Shared action keys/mask -- MUST be identical on all six cameras and on the
 # fire command. Defaults match the driver defaults.
@@ -80,6 +86,7 @@ gev_scpd=0                # inter-packet delay (ns); 0 = off. Raise to throttle 
 
 # Common args for every camera (trigger_mode on -> synchronized action capture).
 common_args="-p pixelformat:=$pixelformat -p gamma:=$gamma -p target_brightness:=$target_brightness \
+-p reverse_x:=$reverse_x -p reverse_y:=$reverse_y \
 -p trigger_mode:=true \
 -p action_device_key:=$action_device_key -p action_group_key:=$action_group_key \
 -p action_group_mask:=$action_group_mask -p action_lead_time:=$action_lead_time \
