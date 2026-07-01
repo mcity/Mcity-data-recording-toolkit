@@ -37,8 +37,8 @@ target_brightness=70
 # Image flip in the camera (same as the ReverseX/ReverseY toggles in ArenaView).
 # Set true to mirror. NOTE: flipping a Bayer image changes the effective Bayer
 # pattern -- if colors look wrong after flipping, see SYNC_TRIGGERING.md.
-reverse_x=false
-reverse_y=false
+reverse_x=true
+reverse_y=true
 
 
 # Shared action keys/mask -- MUST be identical on all six cameras and on the
