@@ -1,23 +1,26 @@
 #!/bin/bash
 
-# Merge the camA + camB bags from record-rtklidarcam-split-cams.sh into a single
-# Foxglove-viewable mcap bag. Uses `ros2 bag convert`, which ships with rosbag2 --
-# no extra tools needed. Messages from both inputs are merged by timestamp.
+# Merge the camA + camB + lidar_ins_tf bags from record-rtklidarcam-split-cams.sh
+# into a single Foxglove-viewable mcap bag. Uses `ros2 bag convert`, which ships
+# with rosbag2 -- no extra tools needed. Messages from all inputs are merged by
+# timestamp.
 #
 # Usage: ./merge-split-cams.sh <run_dir>
-#   where <run_dir> contains camA/ and camB/  ->  writes <run_dir>/merged/
+#   where <run_dir> contains camA/, camB/, lidar_ins_tf/  ->  writes <run_dir>/merged/
 
 if [ -z "$1" ]; then
-    echo "Usage: $0 <run_dir>   (the directory containing camA/ and camB/)"
+    echo "Usage: $0 <run_dir>   (the directory containing camA/, camB/, lidar_ins_tf/)"
     exit 1
 fi
 
 run_dir="${1%/}"
 
-if [ ! -d "$run_dir/camA" ] || [ ! -d "$run_dir/camB" ]; then
-    echo "Expected $run_dir/camA and $run_dir/camB to exist."
-    exit 1
-fi
+for d in camA camB lidar_ins_tf; do
+    if [ ! -d "$run_dir/$d" ]; then
+        echo "Expected $run_dir/$d to exist."
+        exit 1
+    fi
+done
 if [ -e "$run_dir/merged" ]; then
     echo "$run_dir/merged already exists -- remove it first."
     exit 1
@@ -32,8 +35,8 @@ output_bags:
     all: true
 EOF
 
-echo "Merging $run_dir/camA + $run_dir/camB -> $run_dir/merged ..."
-ros2 bag convert -i "$run_dir/camA" -i "$run_dir/camB" -o "$cfg"
+echo "Merging camA + camB + lidar_ins_tf -> $run_dir/merged ..."
+ros2 bag convert -i "$run_dir/camA" -i "$run_dir/camB" -i "$run_dir/lidar_ins_tf" -o "$cfg"
 status=$?
 rm -f "$cfg"
 

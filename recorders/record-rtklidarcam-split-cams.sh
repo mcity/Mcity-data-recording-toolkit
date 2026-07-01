@@ -1,21 +1,30 @@
 #!/bin/bash
 
-# Split-camera recorder: records the six cameras as TWO rosbag2 processes so the
-# writer CPU is spread across cores. A single writer saturates a core around
-# 30 Hz (~160% CPU, dropping frames); two writers at ~half the data rate each
-# stay well under one core and stop dropping.
+# Split recorder: records as THREE rosbag2 processes so the writer CPU is spread
+# across cores. A single writer saturates a core around 30 Hz (~160% CPU,
+# dropping frames); splitting keeps each writer well under one core so nothing
+# drops.
 #
-# Both bags keep the normal chunked mcap profile, so each opens in Foxglove
+#   camA          -> cam1,cam2,cam3
+#   camB          -> cam4,cam5,cam6
+#   lidar_ins_tf  -> /rslidar_points, /ins/imu, /ins/nav_sat_fix, /tf, /tf_static  (INS reliable)
+#
+# The two camera groups are balanced equally (3 each, no extra topics) and the
+# sensors get their own process -- an earlier 2-way split lost frames on the group
+# that also carried the sensors, because that writer was heavier than the other.
+#
+# All three bags keep the normal chunked mcap profile, so each opens in Foxglove
 # (unlike --storage-preset-profile fastwrite, which drops the chunk index). Merge
-# the two afterwards with merge-split-cams.sh for a single combined bag.
+# them with merge-split-cams.sh for a single combined bag.
 #
 # Usage: ./record-rtklidarcam-split-cams.sh <run_name>
 #
 # Creates:
-#   <base_dir>/<run_name>/camA/   -> cam1,cam2,cam3 + ins + lidar + tf  (INS reliable)
-#   <base_dir>/<run_name>/camB/   -> cam4,cam5,cam6
+#   <base_dir>/<run_name>/camA/
+#   <base_dir>/<run_name>/camB/
+#   <base_dir>/<run_name>/lidar_ins_tf/
 #
-# Ctrl-C stops both recorders cleanly (SIGINT lets mcap finalize its index).
+# Ctrl-C stops all three recorders cleanly (SIGINT lets mcap finalize its index).
 
 if [ -z "$1" ]; then
     echo "Usage: $0 <run_name>"
@@ -34,32 +43,25 @@ base_dir="/media/mcity/New Volume/june29-2026/track_recordings"
 
 out_dir="$base_dir/$run_name"
 
-# rosbag2 RAM cache per recorder (bounded so it can't OOM; each group is ~half the
-# data rate, so this is generous slack).
+# rosbag2 RAM cache per recorder (bounded so it can't OOM).
 cam_cache=4000000000
 
 # Record /ins/* reliably -- the OXTS publisher is reliable but rosbag2 otherwise
-# subscribes best-effort and drops INS messages under load. (Group A carries INS.)
+# subscribes best-effort and drops INS messages under load. (lidar_ins_tf carries INS.)
 qos_overrides="$(dirname "$0")/ins_reliable_qos.yaml"
 
-if [ -e "$out_dir/camA" ] || [ -e "$out_dir/camB" ]; then
+if [ -e "$out_dir/camA" ] || [ -e "$out_dir/camB" ] || [ -e "$out_dir/lidar_ins_tf" ]; then
     echo "Output already exists under $out_dir -- pick a new <run_name>."
     exit 1
 fi
 mkdir -p "$out_dir"
 
-# --- Group A: cam1-3 + INS + lidar + tf (a self-contained set for verification) ---
+# --- Group A: cam1-3 ---
 ros2 bag record -s mcap \
   --max-cache-size "$cam_cache" \
-  --qos-profile-overrides-path "$qos_overrides" \
   /arenacam1/images \
   /arenacam2/images \
   /arenacam3/images \
-  /ins/imu \
-  /ins/nav_sat_fix \
-  /rslidar_points \
-  /tf \
-  /tf_static \
   -o "$out_dir/camA" &
 a_pid=$!
 
@@ -72,14 +74,26 @@ ros2 bag record -s mcap \
   -o "$out_dir/camB" &
 b_pid=$!
 
-# Stop both recorders cleanly on Ctrl-C.
-trap 'echo; echo "Stopping recorders..."; kill -INT "$a_pid" "$b_pid" 2>/dev/null' INT TERM
+# --- Sensors: lidar + INS + tf ---
+ros2 bag record -s mcap \
+  --max-cache-size "$cam_cache" \
+  --qos-profile-overrides-path "$qos_overrides" \
+  /rslidar_points \
+  /ins/imu \
+  /ins/nav_sat_fix \
+  /tf \
+  /tf_static \
+  -o "$out_dir/lidar_ins_tf" &
+s_pid=$!
 
-echo "Recording (Ctrl-C to stop both):"
-echo "  camA (cam1-3 + ins + lidar + tf) -> $out_dir/camA   (pid $a_pid)"
-echo "  camB (cam4-6)                    -> $out_dir/camB   (pid $b_pid)"
+# Stop all three recorders cleanly on Ctrl-C.
+trap 'echo; echo "Stopping recorders..."; kill -INT "$a_pid" "$b_pid" "$s_pid" 2>/dev/null' INT TERM
+
+echo "Recording (Ctrl-C to stop all):"
+echo "  camA (cam1-3)   -> $out_dir/camA           (pid $a_pid)"
+echo "  camB (cam4-6)   -> $out_dir/camB           (pid $b_pid)"
+echo "  lidar_ins_tf    -> $out_dir/lidar_ins_tf   (pid $s_pid)"
 echo
-echo "Verify a run in Foxglove by opening $out_dir/camA (has INS + lidar + tf + 3 cams)."
-echo "Combine both into one bag with:  ./merge-split-cams.sh \"$out_dir\""
+echo "Combine all three into one bag with:  ./merge-split-cams.sh \"$out_dir\""
 
 wait
