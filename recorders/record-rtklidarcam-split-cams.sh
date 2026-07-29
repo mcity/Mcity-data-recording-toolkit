@@ -36,7 +36,7 @@ run_name="$1"
 # Path to the base directory where the data will be saved, depending on which drive you will be saving to
 # SENSOR DRIVE
 #base_dir="/media/mcity/SENSOR_DATA_B/june4-2026"
-base_dir="/media/mcity/New Volume/june29-2026/track_recordings"
+base_dir="/media/mcity/New Volume/july9-2026/calibration"
 
 # MAIN OS DRIVE
 #base_dir="/home/mcity/mcity-engineering/xujie/data-capture/may8-2026"
@@ -94,6 +94,5 @@ echo "  camA (cam1-3)   -> $out_dir/camA           (pid $a_pid)"
 echo "  camB (cam4-6)   -> $out_dir/camB           (pid $b_pid)"
 echo "  lidar_ins_tf    -> $out_dir/lidar_ins_tf   (pid $s_pid)"
 echo
-echo "Combine all three into one bag with:  ./merge-split-cams.sh \"$out_dir\""
 
 wait
