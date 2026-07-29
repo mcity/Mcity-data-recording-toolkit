@@ -1,2 +1,7 @@
 .mcap
 .db3
+__pycache__/
+*.pyc
+*.swp
+*.swo
+*~
