@@ -58,10 +58,15 @@ pixelformat="bayer_bggr8"
 # Exposure time in MICROSECONDS. Must be a FLOAT (4000.0, not 4000) -- the driver
 # declares exposure_time as a double and rclcpp rejects an integer override.
 #
-# Starting point is intentionally LOW -- in direct sun a 2.3 MP Triton at 0 dB
-# behind an f/2-ish lens saturates around ~300-600 us, so 500 us should sit
-# slightly dark in full sun and clearly dark in overcast/shade. That is the
-# intent: dark frames lift cleanly in post, blown highlights never come back.
+# Measured on the vehicle 2026-09-18 (TRT023S-C, 0 dB, gamma 0.5):
+#   500 us clear sun  -> 25-38% of pixels clipped (far too bright)
+#   100 us clear sun  -> no clipping, ~0.6 stops of highlight headroom
+#    60 us overcast   -> no clipping, ~2 stops lifted in post, 2-5% crushed black
+# Rule of thumb, pick at launch with check-exposure.py:
+#   clear sun  ->  60 us   (about 1.3 stops of headroom)
+#   overcast   -> 100-120 us
+# Dark frames lift cleanly in post, blown highlights never come back, so when
+# in doubt go lower.
 # Tuning ladder:
 #   too bright / clipping -> lower exposure_time
 #   too dark              -> raise exposure_time first (cheapest, no added noise)
@@ -76,7 +81,7 @@ pixelformat="bayer_bggr8"
 #
 # The driver clamps this into the camera's legal ExposureTime range (and logs a
 # warning) instead of dying, so a wrong number still launches.
-exposure_time=500.0
+exposure_time=60.0
 
 # Fixed gain in dB. 0.0 = the sensor's clean floor, which is what you want when
 # the plan is to recover exposure in post. Raise only after exposure_time has

@@ -1,46 +1,68 @@
 #!/usr/bin/env python3
 """
 Lift deliberately under-exposed (static exposure) camera frames from a rosbag
-into viewable images.
+into viewable images, with a per-run, per-frame or smoothed per-frame EV.
 
 Companion to drivers/lucid-drivers-sync-trigger-static-exposure.sh: the
-cameras are run open-loop and DARK so highlights never clip, and brightness is
-restored here. Because the capture was static, ONE exposure adjustment per
-camera is correct for the whole run, which is what this does.
+cameras run open-loop and DARK so highlights never clip, and brightness is
+restored here. Because the camera never adapts, the raw data in the bag is
+photometrically consistent; this tool decides how much to lift AFTER the fact,
+with the whole run available, so unlike in-camera autoexposure there is no
+convergence lag and no flicker.
 
 Pipeline per frame:
   1. decode the sensor_msgs/Image (bayer_*8 / bayer_*16 / mono / rgb / bgr)
   2. debayer (OpenCV, pattern taken from the encoding string)
   3. undo the in-camera gamma (the launcher uses gamma=0.5) -> linear light
-  4. multiply by 2**EV  (EV = stops of lift; fixed, or chosen automatically)
+  4. multiply by 2**EV
   5. clip, apply a display gamma (default 2.2) and write an 8-bit JPEG/PNG
 
-EV selection:
-  --ev 3.0        fixed: same lift for every camera and frame (fully deterministic)
-  --auto          (default) per camera: sample frames from the start of the run
-                  and pick the EV that puts the --auto-percentile (99.5th) of
-                  linear luminance at --auto-target (0.90) -> bright but
-                  highlights intact. The chosen EVs are printed; re-run with
-                  --ev to pin them, or use --auto-global for one EV across all
-                  six cameras (keeps cross-camera brightness comparable).
-                  If the sun/sky covers more than ~0.5% of the frame the auto
-                  EV will protect it and leave the rest dark; lower
-                  --auto-percentile (e.g. 97) to let the sky clip instead.
+EV = stops of lift. The "highlight level" of a frame is the --auto-percentile
+(99.5th) of its linear pixel values; EV is whatever puts that level at
+--auto-target (0.90): as bright as possible with highlights intact.
+
+--ev-mode
+  run     one EV per camera for the whole run, from the first --auto-samples
+          frames. Fully consistent; wrong if lighting changes mid-run.
+  frame   EV chosen from each frame on its own. Tracks lighting instantly but
+          can flicker frame to frame (passing cars, sun glints).
+  smooth  (default) per-frame EV, then a CENTERED rolling median + mean over
+          --ev-window seconds (default 2 s). Follows clouds / dusk / tunnels
+          with no lag (it sees the future) and no flicker. Recommended for
+          long runs.
+--ev <stops>  fixed EV for every frame (overrides --ev-mode).
+--ev-global   share one EV across all cameras at each instant (the brightest
+              camera sets it). Keeps cross-camera brightness comparable, which
+              matters when frames from several cameras feed one reconstruction.
+              Without it each camera gets its own EV track.
+
+Every write is recorded in <out>/exposure_ev.csv (camera, stamp_ns, file,
+ev_applied, highlight_level_linear). A reconstruction pipeline that models
+per-image exposure can consume ev_applied directly; lifting is a pure gain in
+linear light, so multiplying back by 2**-ev recovers the original relative
+radiance (up to clipping at 1.0).
 
 Output: <out>/<camera>/<header.stamp ns>.jpg  (stamp = PTP/RTK capture time,
 so frames from different cameras with the same stamp are the same shot.)
 
 Usage:
     source /opt/ros/humble/setup.bash
-    python3 expose-in-post.py "<bagdir>" -o /tmp/lifted                  # auto EV
-    python3 expose-in-post.py "<bagdir>" -o /tmp/lifted --ev 3           # +3 stops
-    python3 expose-in-post.py "<bagdir>" -o /tmp/lifted --every 30 --max-frames 20   # quick look
-    python3 expose-in-post.py "<bagdir>" -o /tmp/lifted --camera-gamma 1.0   # if launched with gamma=1.0
+    python3 expose-in-post.py "<bagdir>" -o <outdir>                      # smooth, per camera
+    python3 expose-in-post.py "<bagdir>" -o <outdir> --ev-global          # smooth, one EV per shot
+    python3 expose-in-post.py "<bagdir>" -o <outdir> --ev-mode run        # one EV per camera
+    python3 expose-in-post.py "<bagdir>" -o <outdir> --ev 3               # fixed +3 stops
+    python3 expose-in-post.py "<bagdir>" -o <outdir> --every 30 --max-frames 20   # quick look
+    python3 expose-in-post.py "<bagdir>" -o <outdir> --camera-gamma 1.0   # if launched with gamma=1.0
+
+The bag is read twice in the auto modes (stats pass, then write pass). The
+stats pass is cheap (subsampled raw values, no debayer); --ev-sample-every N
+computes stats on every Nth frame and interpolates in between.
 
 Requires numpy + opencv (python3-opencv on the vehicle) and the ROS 2 python
 packages (rosbag2_py, rclpy) for reading the bag.
 """
 import argparse
+import csv
 import os
 import sys
 
@@ -63,6 +85,13 @@ BAYER_TO_CV = {
     "bayer_grbg": "COLOR_BayerGB2BGR",
 }
 
+EV_MIN = -1.0   # allow a slight darkening if a frame is brighter than target
+EV_MAX = 8.0
+
+
+# --------------------------------------------------------------------------
+# image math
+# --------------------------------------------------------------------------
 
 def decode_image(encoding, data, height, width, step, is_bigendian):
     """Return (array HxW or HxWxC, bits) with the raw integer sensor values."""
@@ -127,15 +156,28 @@ def luminance(lin):
     return 0.0722 * b + 0.7152 * g + 0.2126 * r
 
 
-def choose_ev(linear_frames, target=0.90, percentile=99.5, max_ev=8.0):
-    """EV that maps the given percentile of linear luminance (pooled over the
-    sampled frames) to `target`. Never negative: the point is to lift."""
+def highlight_level(raw, bits, camera_gamma, percentile=99.5, sub=8):
+    """Linear-light level of the given percentile of a frame's raw sensor
+    values (all channels pooled, subsampled). Cheap: no debayer."""
+    s = raw[::sub, ::sub]
+    lin = linearize(s, bits, camera_gamma)
+    return float(np.percentile(lin, percentile))
+
+
+def ev_from_level(level, target=0.90):
+    """EV (stops) that maps `level` to `target`, clipped to [EV_MIN, EV_MAX]."""
+    if level <= 1e-6:
+        return EV_MAX
+    return float(np.clip(np.log2(target / level), EV_MIN, EV_MAX))
+
+
+def choose_ev(linear_frames, target=0.90, percentile=99.5, max_ev=EV_MAX):
+    """Run-mode EV from debayered linear frames (pooled percentile)."""
     vals = np.concatenate([luminance(f)[::4, ::4].ravel() for f in linear_frames])
     p = float(np.percentile(vals, percentile))
     if p <= 1e-6:
         return max_ev
-    ev = float(np.log2(target / p))
-    return float(np.clip(ev, 0.0, max_ev))
+    return float(np.clip(np.log2(target / p), 0.0, max_ev))
 
 
 def apply_lift(lin, ev, display_gamma=2.2):
@@ -152,6 +194,87 @@ def process_frame(raw, bits, encoding, camera_gamma, ev, display_gamma):
     lin = linearize(bgr, bits, camera_gamma)
     return apply_lift(lin, ev, display_gamma)
 
+
+# --------------------------------------------------------------------------
+# EV tracks over time
+# --------------------------------------------------------------------------
+
+def _centered_window_filter(t, x, window_s, fn):
+    """Apply fn over a centered window of +-window_s/2 seconds around each
+    sample. t is sorted (seconds), x same length."""
+    if window_s <= 0 or len(x) < 2:
+        return np.asarray(x, dtype=np.float64)
+    half = window_s / 2.0
+    lo = np.searchsorted(t, t - half, side="left")
+    hi = np.searchsorted(t, t + half, side="right")
+    out = np.empty(len(x), dtype=np.float64)
+    for i in range(len(x)):
+        out[i] = fn(x[lo[i]:hi[i]])
+    return out
+
+
+def smooth_ev(t, ev, window_s):
+    """Centered rolling median (kills one-frame glints) then centered rolling
+    mean (removes steps) over window_s seconds. Non-causal on purpose: post has
+    the whole run, so the lift can anticipate a change instead of lagging it."""
+    ev = np.asarray(ev, dtype=np.float64)
+    med = _centered_window_filter(t, ev, window_s, np.median)
+    return _centered_window_filter(t, med, window_s, np.mean)
+
+
+class EVTrack:
+    """Per-camera (stamp -> EV) lookup built from sampled highlight levels."""
+
+    def __init__(self, stamps_ns, levels, mode, target, window_s):
+        order = np.argsort(stamps_ns)
+        self.t = np.asarray(stamps_ns, dtype=np.float64)[order] / 1e9
+        self.level = np.asarray(levels, dtype=np.float64)[order]
+        ev = np.array([ev_from_level(p, target) for p in self.level])
+        if mode == "smooth":
+            ev = smooth_ev(self.t, ev, window_s)
+        elif mode == "run":
+            # One value for the run, set by the 90th percentile of the sampled
+            # highlight levels: protects highlights in nearly every frame
+            # without letting a single glint frame darken the whole run.
+            ev = np.full_like(ev, ev_from_level(float(np.percentile(self.level, 90)),
+                                                target))
+        self.ev = ev
+
+    def at(self, stamp_ns):
+        """EV at a stamp; linear interpolation between sampled frames."""
+        if len(self.t) == 1:
+            return float(self.ev[0])
+        return float(np.interp(stamp_ns / 1e9, self.t, self.ev))
+
+    def level_at(self, stamp_ns):
+        if len(self.t) == 1:
+            return float(self.level[0])
+        return float(np.interp(stamp_ns / 1e9, self.t, self.level))
+
+
+def build_tracks(samples, mode, target, window_s, ev_global):
+    """samples: {topic: (stamps_ns list, levels list)} -> {topic: EVTrack}.
+
+    With ev_global, all cameras share one track: at each sampled instant the
+    highlight level is the MAX over cameras (the brightest camera must not
+    clip), evaluated on the union of all sample stamps.
+    """
+    if not ev_global:
+        return {t: EVTrack(s, l, mode, target, window_s)
+                for t, (s, l) in samples.items()}
+    per_cam = {t: EVTrack(s, l, "frame", target, 0.0) for t, (s, l) in samples.items()}
+    all_stamps = np.unique(np.concatenate(
+        [np.asarray(s, dtype=np.int64) for s, _ in samples.values()]))
+    all_t = all_stamps.astype(np.float64) / 1e9
+    pooled = np.max([np.interp(all_t, tr.t, tr.level) for tr in per_cam.values()],
+                    axis=0)
+    shared = EVTrack(all_stamps, pooled, mode, target, window_s)
+    return {t: shared for t in samples}
+
+
+# --------------------------------------------------------------------------
+# bag I/O
+# --------------------------------------------------------------------------
 
 def open_reader(bag_uri, storage_id):
     import rosbag2_py
@@ -191,6 +314,10 @@ def iter_images(bag_uri, storage_id, topics, every, max_frames):
         yield topic, deserialize_message(data, get_message(type_map[topic]))
 
 
+def stamp_ns(msg):
+    return msg.header.stamp.sec * 1_000_000_000 + msg.header.stamp.nanosec
+
+
 def cam_name(topic):
     parts = [p for p in topic.split("/") if p]
     return parts[0] if parts else "cam"
@@ -204,22 +331,28 @@ def main():
     ap.add_argument("--topics", nargs="+", default=CAMS)
     ap.add_argument("--storage", default="mcap")
     ap.add_argument("--ev", type=float, default=None,
-                    help="fixed lift in stops for all cameras (disables --auto)")
-    ap.add_argument("--auto", action="store_true", default=True,
-                    help="pick EV per camera from sample frames (default)")
+                    help="fixed lift in stops for every frame (overrides --ev-mode)")
+    ap.add_argument("--ev-mode", choices=["run", "frame", "smooth"], default="smooth",
+                    help="how EV varies over the run (default smooth)")
+    ap.add_argument("--ev-window", type=float, default=2.0,
+                    help="smooth mode: centered window in seconds (default 2.0)")
+    ap.add_argument("--ev-global", action="store_true",
+                    help="one shared EV across all cameras at each instant")
+    ap.add_argument("--ev-sample-every", type=int, default=1,
+                    help="stats pass: measure every Nth frame, interpolate between (default 1)")
     ap.add_argument("--auto-global", action="store_true",
-                    help="one auto EV shared by all cameras")
+                    help="alias for --ev-mode run --ev-global")
     ap.add_argument("--auto-target", type=float, default=0.90,
-                    help="linear luminance the 99.5th percentile is lifted to (default 0.90)")
+                    help="linear level the highlight percentile is lifted to (default 0.90)")
     ap.add_argument("--auto-percentile", type=float, default=99.5,
-                    help="luminance percentile that is lifted to --auto-target (default 99.5)")
+                    help="percentile of linear pixel values treated as the highlight (default 99.5)")
     ap.add_argument("--auto-samples", type=int, default=10,
-                    help="frames per camera used to choose the auto EV (default 10)")
+                    help="run mode: frames per camera used to choose the EV (default 10)")
     ap.add_argument("--camera-gamma", type=float, default=0.5,
                     help="Gamma the cameras were launched with (default 0.5; use 1.0 if linear)")
     ap.add_argument("--display-gamma", type=float, default=2.2,
                     help="output encoding gamma (default 2.2; 1.0 writes linear)")
-    ap.add_argument("--every", type=int, default=1, help="process every Nth frame")
+    ap.add_argument("--every", type=int, default=1, help="write every Nth frame")
     ap.add_argument("--max-frames", type=int, default=0, help="per camera; 0 = all")
     ap.add_argument("--format", choices=["jpg", "png"], default="jpg")
     ap.add_argument("--jpeg-quality", type=int, default=92)
@@ -227,63 +360,90 @@ def main():
 
     if cv2 is None:
         raise SystemExit("python3-opencv (cv2) is required")
+    if args.auto_global:
+        args.ev_mode, args.ev_global = "run", True
 
     every = max(1, args.every)
 
-    # --- pass 1: choose EV ----------------------------------------------------
+    # --- pass 1: EV tracks --------------------------------------------------
+    tracks = None
     if args.ev is not None:
-        ev_for = {t: float(args.ev) for t in args.topics}
-        print(f"fixed EV +{args.ev:.2f} for all cameras")
+        print(f"fixed EV +{args.ev:.2f} for every frame")
     else:
+        if args.ev_mode == "run":
+            s_every, s_max = every, args.auto_samples
+        else:
+            # cover the same span the write pass will, measured every Nth frame
+            s_every = max(1, args.ev_sample_every)
+            s_max = int(np.ceil(args.max_frames * every / s_every)) if args.max_frames else 0
         samples = {}
+        n = 0
         for topic, msg in iter_images(args.bag, args.storage, args.topics,
-                                      every, args.auto_samples):
+                                      s_every, s_max):
             raw, bits = decode_image(msg.encoding, msg.data, msg.height,
                                      msg.width, msg.step, msg.is_bigendian)
-            lin = linearize(to_bgr(raw, msg.encoding), bits, args.camera_gamma)
-            samples.setdefault(topic, []).append(lin)
-        if args.auto_global:
-            pooled = [f for fr in samples.values() for f in fr]
-            ev = choose_ev(pooled, args.auto_target, args.auto_percentile)
-            ev_for = {t: ev for t in samples}
-            print(f"auto EV (global, {len(pooled)} frames): +{ev:.2f} stops")
-        else:
-            ev_for = {t: choose_ev(fr, args.auto_target, args.auto_percentile)
-                      for t, fr in samples.items()}
-            for t in sorted(ev_for):
-                print(f"auto EV {cam_name(t):10s} +{ev_for[t]:.2f} stops "
-                      f"({len(samples[t])} sample frames)")
-        print("(pass --ev <stops> to pin this for a reproducible re-run)")
+            lvl = highlight_level(raw, bits, args.camera_gamma, args.auto_percentile)
+            st, lv = samples.setdefault(topic, ([], []))
+            st.append(stamp_ns(msg))
+            lv.append(lvl)
+            n += 1
+            if n % 2000 == 0:
+                print(f"stats pass: {n} frames measured")
+        if not samples:
+            raise SystemExit("no frames found")
+        tracks = build_tracks(samples, args.ev_mode, args.auto_target,
+                              args.ev_window, args.ev_global)
+        print(f"EV mode: {args.ev_mode}"
+              f"{' (global across cameras)' if args.ev_global else ' (per camera)'}"
+              f"{f', window {args.ev_window:.1f} s' if args.ev_mode == 'smooth' else ''}")
+        for t in sorted(tracks):
+            tr = tracks[t]
+            print(f"  {cam_name(t):10s} EV min/median/max = "
+                  f"{tr.ev.min():+.2f} / {np.median(tr.ev):+.2f} / {tr.ev.max():+.2f} stops "
+                  f"({len(tr.ev)} samples)")
 
-    # --- pass 2: write frames -------------------------------------------------
+    # --- pass 2: write frames + sidecar ---------------------------------------
+    os.makedirs(args.out, exist_ok=True)
+    csv_path = os.path.join(args.out, "exposure_ev.csv")
     written = {}
     enc_params = ([cv2.IMWRITE_JPEG_QUALITY, args.jpeg_quality]
                   if args.format == "jpg" else [])
-    for topic, msg in iter_images(args.bag, args.storage, args.topics,
-                                  every, args.max_frames):
-        ev = ev_for.get(topic)
-        if ev is None:
-            continue
-        raw, bits = decode_image(msg.encoding, msg.data, msg.height,
-                                 msg.width, msg.step, msg.is_bigendian)
-        out = process_frame(raw, bits, msg.encoding, args.camera_gamma, ev,
-                            args.display_gamma)
-        d = os.path.join(args.out, cam_name(topic))
-        os.makedirs(d, exist_ok=True)
-        stamp = msg.header.stamp.sec * 1_000_000_000 + msg.header.stamp.nanosec
-        path = os.path.join(d, f"{stamp}.{args.format}")
-        if not cv2.imwrite(path, out, enc_params):
-            print(f"failed to write {path}", file=sys.stderr)
-            continue
-        written[topic] = written.get(topic, 0) + 1
-        n = written[topic]
-        if n % 100 == 0:
-            print(f"{cam_name(topic)}: {n} frames")
+    with open(csv_path, "w", newline="") as fh:
+        wr = csv.writer(fh)
+        wr.writerow(["camera", "stamp_ns", "file", "ev_applied",
+                     "highlight_level_linear", "ev_mode"])
+        for topic, msg in iter_images(args.bag, args.storage, args.topics,
+                                      every, args.max_frames):
+            st = stamp_ns(msg)
+            if args.ev is not None:
+                ev, lvl = float(args.ev), ""
+            else:
+                tr = tracks.get(topic)
+                if tr is None:
+                    continue
+                ev, lvl = tr.at(st), f"{tr.level_at(st):.5f}"
+            raw, bits = decode_image(msg.encoding, msg.data, msg.height,
+                                     msg.width, msg.step, msg.is_bigendian)
+            out = process_frame(raw, bits, msg.encoding, args.camera_gamma, ev,
+                                args.display_gamma)
+            d = os.path.join(args.out, cam_name(topic))
+            os.makedirs(d, exist_ok=True)
+            fname = f"{st}.{args.format}"
+            path = os.path.join(d, fname)
+            if not cv2.imwrite(path, out, enc_params):
+                print(f"failed to write {path}", file=sys.stderr)
+                continue
+            wr.writerow([cam_name(topic), st, os.path.join(cam_name(topic), fname),
+                         f"{ev:.4f}", lvl,
+                         "fixed" if args.ev is not None else args.ev_mode])
+            written[topic] = written.get(topic, 0) + 1
+            if written[topic] % 500 == 0:
+                print(f"{cam_name(topic)}: {written[topic]} frames")
 
     print("\nwritten:")
     for t in sorted(written):
-        print(f"  {cam_name(t):10s} {written[t]:6d}  (EV +{ev_for[t]:.2f})  -> "
-              f"{os.path.join(args.out, cam_name(t))}")
+        print(f"  {cam_name(t):10s} {written[t]:6d}  -> {os.path.join(args.out, cam_name(t))}")
+    print(f"per-frame EV sidecar: {csv_path}")
 
 
 if __name__ == "__main__":
