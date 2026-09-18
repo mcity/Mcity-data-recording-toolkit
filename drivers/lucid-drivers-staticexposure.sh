@@ -1,7 +1,15 @@
 #!/bin/bash
 
-# ROS2 Camera drivers for LUCID cameras - Autoexposure
+# ROS2 Camera drivers for LUCID cameras - FREE-RUN (unsynchronized) static exposure
 # Documentation: https://github.com/lucidvisionlabs/arena_camera_ros2/
+#
+# For synchronized (trigger mode) data capture use
+# lucid-drivers-sync-trigger-static-exposure.sh instead; this one is free-run.
+#
+# NOTE (driver change): passing exposure_time now also locks gain
+# (GainAuto=Off, Gain=0 dB unless gain:= is given). Previously auto-gain kept
+# running here and brightened the "static" frames; they will now be darker and
+# actually static. Add "-p gain:=<dB>" to the ros2 run lines to pick a gain.
 
 ##### CONFIG #####
 pixelformat="bayer_rggb8" # Default, faster
