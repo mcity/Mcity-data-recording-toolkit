@@ -60,8 +60,11 @@ mkdir -p "$out_dir"
 ros2 bag record -s mcap \
   --max-cache-size "$cam_cache" \
   /arenacam1/images \
+  /arenacam1/camera_info \
   /arenacam2/images \
+  /arenacam2/camera_info \
   /arenacam3/images \
+  /arenacam3/camera_info \
   -o "$out_dir/camA" &
 a_pid=$!
 
@@ -69,8 +72,11 @@ a_pid=$!
 ros2 bag record -s mcap \
   --max-cache-size "$cam_cache" \
   /arenacam4/images \
+  /arenacam4/camera_info \
   /arenacam5/images \
+  /arenacam5/camera_info \
   /arenacam6/images \
+  /arenacam6/camera_info \
   -o "$out_dir/camB" &
 b_pid=$!
 

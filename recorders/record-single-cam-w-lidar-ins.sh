@@ -93,6 +93,7 @@ qos_overrides="$(dirname "$0")/ins_reliable_qos.yaml"
 
 topics=(
   "/arenacam${cam}/images"
+  "/arenacam${cam}/camera_info"
   /rslidar_points
   /ins/imu
   /ins/nav_sat_fix

@@ -149,7 +149,29 @@ qos_history_depth=30
 scftd_step=4000000        # per-camera frame-transmission-delay step (ns); 0 = off
 gev_scpd=0                # inter-packet delay (ns); 0 = off. Raise to throttle each camera's burst.
 
+# Camera intrinsics (camera_info). Resolved to an ABSOLUTE path from this
+# script's location (not the current directory), since each camera runs in its
+# own gnome-terminal tab. Override with INTRINSICS_DIR=/path/to/dir.
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+intrinsics_dir="${INTRINSICS_DIR:-$script_dir/../camera_intrinsics}"
+intrinsics_dir="$(cd "$intrinsics_dir" 2>/dev/null && pwd)" || {
+    echo "ERROR: intrinsics directory not found: ${INTRINSICS_DIR:-$script_dir/../camera_intrinsics}" >&2
+    exit 1
+}
+
 ##################
+
+# Every camera's intrinsics file must exist before any tab is launched (the
+# driver fails at startup on a missing/invalid file).
+missing=()
+for n in 1 2 3 4 5 6; do
+    [ -f "$intrinsics_dir/intrinsics_matlab-cam$n.json" ] || missing+=("$intrinsics_dir/intrinsics_matlab-cam$n.json")
+done
+if [ ${#missing[@]} -gt 0 ]; then
+    echo "ERROR: missing camera intrinsics file(s):" >&2
+    printf '  %s\n' "${missing[@]}" >&2
+    exit 1
+fi
 
 # Optional CLI overrides: $1 = exposure (us), $2 = gain (dB).
 if [ -n "$1" ]; then exposure_time="$1"; fi
@@ -191,29 +213,29 @@ common_args="-p pixelformat:=$pixelformat -p gamma:=$gamma \
 
 # Camera 1  -- ACTION MASTER (fires /trigger_all; broadcasts the action command)
 serial="254300057"
-gnome-terminal --tab --title=cam1 -- bash -c "ros2 run arena_camera_node start --ros-args -r __node:=arenacam1 $common_args -p serial:=$serial -p topic:=/arenacam1/images -p camera_name:=arenacam1 -p action_master:=true -p action_trigger_rate:=$action_trigger_rate -p gev_scftd:=$((0 * scftd_step)); /bin/bash"
+gnome-terminal --tab --title=cam1 -- bash -c "ros2 run arena_camera_node start --ros-args -r __node:=arenacam1 $common_args -p serial:=$serial -p topic:=/arenacam1/images -p camera_name:=arenacam1 -p camera_intrinsics_file:='$intrinsics_dir/intrinsics_matlab-cam1.json' -p action_master:=true -p action_trigger_rate:=$action_trigger_rate -p gev_scftd:=$((0 * scftd_step)); /bin/bash"
 sleep 1
 
 # Camera 2
 serial="254300058"
-gnome-terminal --tab --title=cam2 -- bash -c "ros2 run arena_camera_node start --ros-args -r __node:=arenacam2 $common_args -p serial:=$serial -p topic:=/arenacam2/images -p camera_name:=arenacam2 -p gev_scftd:=$((1 * scftd_step)); /bin/bash"
+gnome-terminal --tab --title=cam2 -- bash -c "ros2 run arena_camera_node start --ros-args -r __node:=arenacam2 $common_args -p serial:=$serial -p topic:=/arenacam2/images -p camera_name:=arenacam2 -p camera_intrinsics_file:='$intrinsics_dir/intrinsics_matlab-cam2.json' -p gev_scftd:=$((1 * scftd_step)); /bin/bash"
 sleep 1
 
 # Camera 3
 serial="254300053"
-gnome-terminal --tab --title=cam3 -- bash -c "ros2 run arena_camera_node start --ros-args -r __node:=arenacam3 $common_args -p serial:=$serial -p topic:=/arenacam3/images -p camera_name:=arenacam3 -p gev_scftd:=$((2 * scftd_step)); /bin/bash"
+gnome-terminal --tab --title=cam3 -- bash -c "ros2 run arena_camera_node start --ros-args -r __node:=arenacam3 $common_args -p serial:=$serial -p topic:=/arenacam3/images -p camera_name:=arenacam3 -p camera_intrinsics_file:='$intrinsics_dir/intrinsics_matlab-cam3.json' -p gev_scftd:=$((2 * scftd_step)); /bin/bash"
 sleep 1
 
 # Camera 4
 serial="254300056"
-gnome-terminal --tab --title=cam4 -- bash -c "ros2 run arena_camera_node start --ros-args -r __node:=arenacam4 $common_args -p serial:=$serial -p topic:=/arenacam4/images -p camera_name:=arenacam4 -p gev_scftd:=$((3 * scftd_step)); /bin/bash"
+gnome-terminal --tab --title=cam4 -- bash -c "ros2 run arena_camera_node start --ros-args -r __node:=arenacam4 $common_args -p serial:=$serial -p topic:=/arenacam4/images -p camera_name:=arenacam4 -p camera_intrinsics_file:='$intrinsics_dir/intrinsics_matlab-cam4.json' -p gev_scftd:=$((3 * scftd_step)); /bin/bash"
 sleep 1
 
 # Camera 5
 serial="254300055"
-gnome-terminal --tab --title=cam5 -- bash -c "ros2 run arena_camera_node start --ros-args -r __node:=arenacam5 $common_args -p serial:=$serial -p topic:=/arenacam5/images -p camera_name:=arenacam5 -p gev_scftd:=$((4 * scftd_step)); /bin/bash"
+gnome-terminal --tab --title=cam5 -- bash -c "ros2 run arena_camera_node start --ros-args -r __node:=arenacam5 $common_args -p serial:=$serial -p topic:=/arenacam5/images -p camera_name:=arenacam5 -p camera_intrinsics_file:='$intrinsics_dir/intrinsics_matlab-cam5.json' -p gev_scftd:=$((4 * scftd_step)); /bin/bash"
 sleep 1
 
 # Camera 6
 serial="254300054"
-gnome-terminal --tab --title=cam6 -- bash -c "ros2 run arena_camera_node start --ros-args -r __node:=arenacam6 $common_args -p serial:=$serial -p topic:=/arenacam6/images -p camera_name:=arenacam6 -p gev_scftd:=$((5 * scftd_step)); /bin/bash"
+gnome-terminal --tab --title=cam6 -- bash -c "ros2 run arena_camera_node start --ros-args -r __node:=arenacam6 $common_args -p serial:=$serial -p topic:=/arenacam6/images -p camera_name:=arenacam6 -p camera_intrinsics_file:='$intrinsics_dir/intrinsics_matlab-cam6.json' -p gev_scftd:=$((5 * scftd_step)); /bin/bash"

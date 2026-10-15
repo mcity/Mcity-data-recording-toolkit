@@ -29,11 +29,17 @@ qos_overrides="$(dirname "$0")/ins_reliable_qos.yaml"
 ros2 bag record -s mcap \
   --qos-profile-overrides-path "$qos_overrides" \
   /arenacam1/images \
+  /arenacam1/camera_info \
   /arenacam2/images \
+  /arenacam2/camera_info \
   /arenacam3/images \
+  /arenacam3/camera_info \
   /arenacam4/images \
+  /arenacam4/camera_info \
   /arenacam5/images \
+  /arenacam5/camera_info \
   /arenacam6/images \
+  /arenacam6/camera_info \
   /ins/imu \
   /ins/nav_sat_fix \
   /rslidar_points \
