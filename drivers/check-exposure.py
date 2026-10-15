@@ -180,37 +180,57 @@ def run_live(topics, interval):
         rclpy.try_shutdown()
 
 
+def expand_bags(path):
+    """A bag dir (has metadata.yaml) -> [path]; a split-recorder run folder
+    -> its child bags (camA, camB, ...)."""
+    import os
+    if os.path.isfile(os.path.join(path, "metadata.yaml")):
+        return [path]
+    subs = sorted(d for d in (os.path.join(path, n) for n in os.listdir(path))
+                  if os.path.isfile(os.path.join(d, "metadata.yaml")))
+    if not subs:
+        sys.exit(f"{path} is neither a bag (no metadata.yaml) nor a run folder containing bags")
+    return subs
+
+
 def run_bag(bag_uri, storage_id, topics, every, max_frames):
     import rosbag2_py
     from rclpy.serialization import deserialize_message
     from rosidl_runtime_py.utilities import get_message
 
-    reader = rosbag2_py.SequentialReader()
-    reader.open(
-        rosbag2_py.StorageOptions(uri=bag_uri, storage_id=storage_id),
-        rosbag2_py.ConverterOptions(input_serialization_format="cdr",
-                                    output_serialization_format="cdr"),
-    )
-    type_map = {t.name: t.type for t in reader.get_all_topics_and_types()}
-    present = [t for t in topics if t in type_map]
+    present = []
+    acc = {}
+    for bag in expand_bags(bag_uri):
+        reader = rosbag2_py.SequentialReader()
+        reader.open(
+            rosbag2_py.StorageOptions(uri=bag, storage_id=storage_id),
+            rosbag2_py.ConverterOptions(input_serialization_format="cdr",
+                                        output_serialization_format="cdr"),
+        )
+        type_map = {t.name: t.type for t in reader.get_all_topics_and_types()}
+        here = [t for t in topics if t in type_map]
+        if not here:
+            continue
+        present += [t for t in topics if t in here and t not in present]
+        seen = {t: 0 for t in here}
+        for t in here:
+            acc.setdefault(t, [])
+        while reader.has_next():
+            topic, data, _ = reader.read_next()
+            if topic not in seen:
+                continue
+            seen[topic] += 1
+            if (seen[topic] - 1) % every != 0:
+                continue
+            if max_frames and len(acc[topic]) >= max_frames:
+                if all(len(acc[t]) >= max_frames for t in here):
+                    break
+                continue
+            msg = deserialize_message(data, get_message(type_map[topic]))
+            acc[topic].append(frame_stats(image_to_array(msg)))
     if not present:
-        print(f"none of {topics} in this bag; topics are: {sorted(type_map)}")
+        print(f"none of {topics} found under {bag_uri}")
         return
-    seen = {t: 0 for t in present}
-    acc = {t: [] for t in present}
-    while reader.has_next():
-        topic, data, _ = reader.read_next()
-        if topic not in seen:
-            continue
-        seen[topic] += 1
-        if (seen[topic] - 1) % every != 0:
-            continue
-        if max_frames and len(acc[topic]) >= max_frames:
-            if all(len(acc[t]) >= max_frames for t in present):
-                break
-            continue
-        msg = deserialize_message(data, get_message(type_map[topic]))
-        acc[topic].append(frame_stats(image_to_array(msg)))
 
     print(f"bag: {bag_uri}  (every {every}th frame"
           f"{', max ' + str(max_frames) + ' sampled per camera' if max_frames else ''})")
@@ -237,7 +257,8 @@ def main():
     ap.add_argument("--topics", nargs="+", default=CAMS)
     ap.add_argument("--interval", type=float, default=1.0,
                     help="live report period, seconds (default 1.0)")
-    ap.add_argument("--bag", help="rosbag2 directory to summarize instead of live")
+    ap.add_argument("--bag", help="rosbag2 directory, or a split-recorder run folder "
+                                  "(camA/camB read together), to summarize instead of live")
     ap.add_argument("--storage", default="mcap", help="bag storage id (default mcap)")
     ap.add_argument("--every", type=int, default=10,
                     help="bag mode: sample every Nth frame per camera (default 10)")

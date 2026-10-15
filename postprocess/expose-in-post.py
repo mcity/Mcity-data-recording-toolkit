@@ -47,7 +47,8 @@ so frames from different cameras with the same stamp are the same shot.)
 
 Usage:
     source /opt/ros/humble/setup.bash
-    python3 expose-in-post.py "<bagdir>" -o <outdir>                      # smooth, per camera
+    python3 expose-in-post.py "<run_dir>" -o <outdir>                     # all bags under a split-recorder run folder
+    python3 expose-in-post.py "<bagdir>" -o <outdir>                      # a single bag
     python3 expose-in-post.py "<bagdir>" -o <outdir> --ev-global          # smooth, one EV per shot
     python3 expose-in-post.py "<bagdir>" -o <outdir> --ev-mode run        # one EV per camera
     python3 expose-in-post.py "<bagdir>" -o <outdir> --ev 3               # fixed +3 stops
@@ -287,31 +288,55 @@ def open_reader(bag_uri, storage_id):
     return reader
 
 
-def iter_images(bag_uri, storage_id, topics, every, max_frames):
-    """Yield (topic, msg) for every Nth frame per topic, up to max_frames each."""
+def expand_bags(paths):
+    """Accept bag directories and/or run folders. A run folder from the split
+    recorder holds several bags (camA, camB, lidar_ins_tf), each with its own
+    metadata.yaml; expand it to those so one invocation covers all cameras."""
+    bags = []
+    for p in paths:
+        if os.path.isfile(os.path.join(p, "metadata.yaml")):
+            bags.append(p)
+            continue
+        subs = sorted(d for d in (os.path.join(p, n) for n in os.listdir(p))
+                      if os.path.isfile(os.path.join(d, "metadata.yaml")))
+        if not subs:
+            raise SystemExit(f"{p} is neither a bag (no metadata.yaml) nor a run "
+                             f"folder containing bags")
+        bags.extend(subs)
+    return bags
+
+
+def iter_images(bag_uris, storage_id, topics, every, max_frames):
+    """Yield (topic, msg) for every Nth frame per topic, up to max_frames
+    each, across one or more bags (each bag holds a subset of the cameras)."""
     from rclpy.serialization import deserialize_message
     from rosidl_runtime_py.utilities import get_message
 
-    reader = open_reader(bag_uri, storage_id)
-    type_map = {t.name: t.type for t in reader.get_all_topics_and_types()}
-    present = [t for t in topics if t in type_map]
-    if not present:
-        raise SystemExit(f"none of {topics} in {bag_uri}; topics: {sorted(type_map)}")
-    seen = {t: 0 for t in present}
-    yielded = {t: 0 for t in present}
-    while reader.has_next():
-        topic, data, _ = reader.read_next()
-        if topic not in seen:
-            continue
-        seen[topic] += 1
-        if (seen[topic] - 1) % every != 0:
-            continue
-        if max_frames and yielded[topic] >= max_frames:
-            if all(yielded[t] >= max_frames for t in present):
-                return
-            continue
-        yielded[topic] += 1
-        yield topic, deserialize_message(data, get_message(type_map[topic]))
+    any_present = False
+    for bag_uri in bag_uris:
+        reader = open_reader(bag_uri, storage_id)
+        type_map = {t.name: t.type for t in reader.get_all_topics_and_types()}
+        present = [t for t in topics if t in type_map]
+        if not present:
+            continue  # e.g. the lidar/INS bag
+        any_present = True
+        seen = {t: 0 for t in present}
+        yielded = {t: 0 for t in present}
+        while reader.has_next():
+            topic, data, _ = reader.read_next()
+            if topic not in seen:
+                continue
+            seen[topic] += 1
+            if (seen[topic] - 1) % every != 0:
+                continue
+            if max_frames and yielded[topic] >= max_frames:
+                if all(yielded[t] >= max_frames for t in present):
+                    break
+                continue
+            yielded[topic] += 1
+            yield topic, deserialize_message(data, get_message(type_map[topic]))
+    if not any_present:
+        raise SystemExit(f"none of {topics} found in {bag_uris}")
 
 
 def stamp_ns(msg):
@@ -326,7 +351,9 @@ def cam_name(topic):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("bag", help="rosbag2 directory (mcap)")
+    ap.add_argument("bag", nargs="+",
+                    help="rosbag2 directory (mcap), several of them, or a run folder "
+                         "from the split recorder (camA/camB/... are read together)")
     ap.add_argument("-o", "--out", required=True, help="output directory")
     ap.add_argument("--topics", nargs="+", default=CAMS)
     ap.add_argument("--storage", default="mcap")
@@ -364,6 +391,8 @@ def main():
         args.ev_mode, args.ev_global = "run", True
 
     every = max(1, args.every)
+    args.bag = expand_bags(args.bag)
+    print("bags: " + ", ".join(args.bag))
 
     # --- pass 1: EV tracks --------------------------------------------------
     tracks = None
