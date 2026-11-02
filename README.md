@@ -32,5 +32,15 @@ This **supersedes** `lucid-drivers-autoexposure-trigger-mode.sh`: with the updat
 - `SYNC_RECORDING.md` (this repo) — the recording/transport/operational side: QoS, transmission staggering, memory sizing, gotchas, verification.
 - `arena_camera_node/SYNC_TRIGGERING.md` (driver repo) — the camera/capture side: how PTP + scheduled action commands produce synchronized exposure.
 
+## Autoware / Alpamayo startup
+`start-cameras.sh` starts the synchronized camera drivers and a JPEG republisher for the Autoware stitcher. On the `alpamayo` branch, `lucid-drivers-sync-trigger.sh` launches cams 1–3 only; cams 4–6 are commented out.
+
+- Run it from a desktop session (the drivers open `gnome-terminal` tabs): `cd drivers && ./start-cameras.sh`
+- Start it automatically at desktop login: `./install-autostart.sh` (undo with `./install-autostart.sh --remove`). For an unattended boot, also turn on automatic login for the `mcity` user.
+
+Anything already running is left alone, so running it twice won't create duplicate publishers.
+
+`arenacam_jpeg_republisher.py` publishes `/arenacamN/images/compressed` (`sensor_msgs/CompressedImage`, JPEG q80, 10 Hz, original header) alongside the raw `/arenacamN/images` topics. It logs per-camera rate, frame size and total bandwidth every 5 s; expect about 10 Hz per camera and about 56 Mbit/s in total. It needs `python3-opencv`.
+
 # Recorders
 Main one is `record-rtklidarcam.sh`. If you are using the rate-limiter and only want to record the rate-limited topics, you can use `record-rtklidarcam-rl.sh`
