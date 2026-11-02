@@ -119,14 +119,14 @@ sleep 1
 
 # Camera 4
 serial="254300056"
-gnome-terminal --tab --title=cam4 -- bash -c "ros2 run arena_camera_node start --ros-args -r __node:=arenacam4 $common_args -p serial:=$serial -p topic:=/arenacam4/images -p camera_name:=arenacam4 -p gev_scftd:=$((3 * scftd_step)); /bin/bash"
+#gnome-terminal --tab --title=cam4 -- bash -c "ros2 run arena_camera_node start --ros-args -r __node:=arenacam4 $common_args -p serial:=$serial -p topic:=/arenacam4/images -p camera_name:=arenacam4 -p gev_scftd:=$((3 * scftd_step)); /bin/bash"
 sleep 1
 
 # Camera 5
 serial="254300055"
-gnome-terminal --tab --title=cam5 -- bash -c "ros2 run arena_camera_node start --ros-args -r __node:=arenacam5 $common_args -p serial:=$serial -p topic:=/arenacam5/images -p camera_name:=arenacam5 -p gev_scftd:=$((4 * scftd_step)); /bin/bash"
+#gnome-terminal --tab --title=cam5 -- bash -c "ros2 run arena_camera_node start --ros-args -r __node:=arenacam5 $common_args -p serial:=$serial -p topic:=/arenacam5/images -p camera_name:=arenacam5 -p gev_scftd:=$((4 * scftd_step)); /bin/bash"
 sleep 1
 
 # Camera 6
 serial="254300054"
-gnome-terminal --tab --title=cam6 -- bash -c "ros2 run arena_camera_node start --ros-args -r __node:=arenacam6 $common_args -p serial:=$serial -p topic:=/arenacam6/images -p camera_name:=arenacam6 -p gev_scftd:=$((5 * scftd_step)); /bin/bash"
+#gnome-terminal --tab --title=cam6 -- bash -c "ros2 run arena_camera_node start --ros-args -r __node:=arenacam6 $common_args -p serial:=$serial -p topic:=/arenacam6/images -p camera_name:=arenacam6 -p gev_scftd:=$((5 * scftd_step)); /bin/bash"
