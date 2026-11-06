@@ -1,11 +1,15 @@
 #!/bin/bash
 
-# Startup script: LUCID sync-trigger drivers + JPEG republisher for Autoware.
+# Startup script: LUCID sync-trigger drivers (+ optional JPEG republisher).
 #
-# Launches lucid-drivers-sync-trigger.sh (gnome-terminal tabs, one per camera),
-# then arenacam_jpeg_republisher.py in its own tab. The republisher publishes
-# /arenacamN/images/compressed (10 Hz JPEG) for the stitcher on .27 so the raw
-# 1.7 Gbit/s streams never leave this machine.
+# Launches lucid-drivers-sync-trigger.sh (gnome-terminal tabs, one per camera).
+#
+# JPEG republisher: OFF by default since 2026-11-06. It made 10 Hz JPEG copies
+# (/arenacamN/images/compressed) for the stitcher on the old second PC (.27),
+# because raw frames died crossing the network. On the single car PC the
+# stitcher reads the raw /arenacamN/images locally, nothing reads the copies,
+# and the republisher costs ~3 CPU cores. Turn it back on with
+#   JPEG_REPUBLISHER=true bash start-cameras.sh
 #
 # Safe to run more than once: anything already running is left alone, so a
 # second launch never starts duplicate drivers.
@@ -15,6 +19,7 @@
 camera_iface="enp10s0f1"   # interface the cameras/network are on
 iface_timeout=60           # seconds to wait for it to come up
 driver_settle=10           # seconds between drivers starting and the republisher
+jpeg_republisher="${JPEG_REPUBLISHER:-false}"   # true: also start arenacam_jpeg_republisher.py
 ##################
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -49,8 +54,10 @@ else
     sleep "$driver_settle"
 fi
 
-# JPEG republisher
-if pgrep -f "arenacam_jpeg_republisher.py" > /dev/null; then
+# JPEG republisher (opt-in, see the header)
+if [ "$jpeg_republisher" != "true" ]; then
+    echo "JPEG republisher not started (JPEG_REPUBLISHER=true to enable)"
+elif pgrep -f "arenacam_jpeg_republisher.py" > /dev/null; then
     echo "JPEG republisher already running, not starting it again"
 else
     gnome-terminal --tab --title=jpeg-republisher -- bash -c "python3 $script_dir/arenacam_jpeg_republisher.py; /bin/bash"
