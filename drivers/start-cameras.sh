@@ -22,15 +22,24 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Same environment as an interactive shell (gnome-terminal tabs inherit it).
 source /opt/ros/humble/setup.bash
 source /home/mcity/Downloads/arena_camera_ros2/ros2_ws/install/setup.bash
-
-# Wait for the camera network.
+# Wait for the camera network and the car (DDS) network.
 for ((i = 0; i < iface_timeout; i++)); do
-    ip -4 addr show "$camera_iface" 2>/dev/null | grep -q "inet " && break
+    ip -4 addr show "$camera_iface" 2>/dev/null | grep -q "inet " &&
+        ip -4 -o addr show | grep -q ' 192\.168\.50\.' && break
     sleep 1
 done
 if ! ip -4 addr show "$camera_iface" 2>/dev/null | grep -q "inet "; then
     echo "WARNING: $camera_iface has no IPv4 address after ${iface_timeout}s, starting anyway"
 fi
+# DDS: CycloneDDS on the car NIC only (never campus WiFi), same config as the
+# Autoware stack. Without a 192.168.50.x NIC the drivers would run isolated on
+# loopback, invisible to the stitcher and Thor: refuse, loudly.
+if ! ip -4 -o addr show | grep -q ' 192\.168\.50\.'; then
+    logger -p user.err -t start-cameras "no 192.168.50.x NIC after ${iface_timeout}s: camera drivers NOT started"
+    echo "ERROR: no 192.168.50.x NIC after ${iface_timeout}s, not starting camera drivers (rerun this script once the car NIC is up)" >&2
+    exit 1
+fi
+source /home/mcity/Mcity/mcity-physical-ai-autostack/examples/lib_dds.sh
 
 # Camera drivers
 if pgrep -f "lib/arena_camera_node/start" > /dev/null; then

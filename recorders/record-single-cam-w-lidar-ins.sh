@@ -78,7 +78,7 @@ esac
 # Base directory for the data, depending on which drive you're saving to.
 # SENSOR DRIVE
 #base_dir="/media/mcity/SENSOR_DATA_B/june4-2026"
-base_dir="/media/mcity/New Volume/july10-2026/calibration"
+base_dir="/media/mcity/New Volume/aug5-2026/calibration"
 # MAIN OS DRIVE
 #base_dir="/home/mcity/mcity-engineering/xujie/data-capture/may8-2026"
 
